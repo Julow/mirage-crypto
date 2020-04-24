@@ -13,6 +13,11 @@ type key    = buffer
 type ctx    = bytes
 
 
+let _cpu_supports flag =
+  match Cpuid.supports [flag] with
+  | Ok r -> r
+  | Error _ -> false
+
 module type AES = sig
   val enc      : buffer -> off -> buffer -> off -> key -> int -> size -> unit
   val dec      : buffer -> off -> buffer -> off -> key -> int -> size -> unit
@@ -42,7 +47,7 @@ module AES : AES = struct
     external mode     : unit -> int = "mc_aes_mode_aesni" [@@noalloc]
   end
 
-  let aesni_supported = true
+  let aesni_supported = _cpu_supports `AES
   let aesni_enabled = AES_aesni.mode () = 1
 
   let impl =
@@ -127,7 +132,7 @@ module GHASH = struct
     external mode : unit -> int = "mc_ghash_mode_pclmul" [@@noalloc]
   end
 
-  let pclmul_supported = true
+  let pclmul_supported = _cpu_supports `PCLMULQDQ
   let pclmul_enabled = GHASH_pclmul.mode () = 1
 
   let impl =
@@ -174,7 +179,7 @@ module Misc : MISC = struct
     external blit : buffer -> off -> buffer -> off -> size -> unit = "caml_blit_bigstring_to_bigstring" [@@noalloc]
   end
 
-  let sse_supported = true
+  let sse_supported = _cpu_supports `SSSE3
   let sse_enabled = Misc_sse.mode () = 1
 
   let impl =
