@@ -13,13 +13,45 @@ type key    = buffer
 type ctx    = bytes
 
 
-module AES = struct
-  external enc      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_enc_bc" "mc_aes_enc" [@@noalloc]
-  external dec      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_dec_bc" "mc_aes_dec" [@@noalloc]
-  external derive_e : secret -> off -> key -> int -> unit = "mc_aes_derive_e_key" [@@noalloc]
-  external derive_d : secret -> off -> key -> int -> key option -> unit = "mc_aes_derive_d_key" [@@noalloc]
-  external rk_s     : int  -> int = "mc_aes_rk_size" [@@noalloc]
-  external mode     : unit -> int = "mc_aes_mode" [@@noalloc]
+module type AES = sig
+  val enc      : buffer -> off -> buffer -> off -> key -> int -> size -> unit
+  val dec      : buffer -> off -> buffer -> off -> key -> int -> size -> unit
+  val derive_e : secret -> off -> key -> int -> unit
+  val derive_d : secret -> off -> key -> int -> key option -> unit
+  val rk_s     : int  -> int
+  val mode     : unit -> int
+end
+
+module AES : AES = struct
+
+  module AES_generic = struct
+    external enc      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_enc_generic_bc" "mc_aes_enc_generic" [@@noalloc]
+    external dec      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_dec_generic_bc" "mc_aes_dec_generic" [@@noalloc]
+    external derive_e : secret -> off -> key -> int -> unit = "mc_aes_derive_e_key_generic" [@@noalloc]
+    external derive_d : secret -> off -> key -> int -> key option -> unit = "mc_aes_derive_d_key_generic" [@@noalloc]
+    external rk_s     : int  -> int = "mc_aes_rk_size_generic" [@@noalloc]
+    let mode () = 0
+  end
+
+  module AES_aesni = struct
+    external enc      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_enc_aesni_bc" "mc_aes_enc_aesni" [@@noalloc]
+    external dec      : buffer -> off -> buffer -> off -> key -> int -> size -> unit = "mc_aes_dec_aesni_bc" "mc_aes_dec_aesni" [@@noalloc]
+    external derive_e : secret -> off -> key -> int -> unit = "mc_aes_derive_e_key_aesni" [@@noalloc]
+    external derive_d : secret -> off -> key -> int -> key option -> unit = "mc_aes_derive_d_key_aesni" [@@noalloc]
+    external rk_s     : int  -> int = "mc_aes_rk_size_aesni" [@@noalloc]
+    external mode     : unit -> int = "mc_aes_mode_aesni" [@@noalloc]
+  end
+
+  let aesni_supported = true
+  let aesni_enabled = AES_aesni.mode () = 1
+
+  let impl =
+    if aesni_supported && aesni_enabled
+    then (module AES_aesni : AES)
+    else (module AES_generic : AES)
+
+  include (val impl)
+
 end
 
 module DES = struct
@@ -72,19 +104,86 @@ module SHA512 = struct
   external ctx_size : unit -> int = "mc_sha512_ctx_size" [@@noalloc]
 end
 
-module GHASH = struct
-  external keysize : unit -> int = "mc_ghash_key_size" [@@noalloc]
-  external keyinit : buffer -> off -> bytes -> unit = "mc_ghash_init_key" [@@noalloc]
-  external ghash : bytes -> bytes -> buffer -> off -> size -> unit = "mc_ghash" [@@noalloc]
-  external mode : unit -> int = "mc_ghash_mode" [@@noalloc]
+module type GHASH = sig
+  val keysize : unit -> int
+  val keyinit : buffer -> off -> bytes -> unit
+  val ghash : bytes -> bytes -> buffer -> off -> size -> unit
+  val mode : unit -> int
 end
 
-(* XXX TODO
- * Unsolved: bounds-checked XORs are slowing things down considerably... *)
-external xor_into : buffer -> off -> buffer -> off -> size -> unit = "mc_xor_into" [@@noalloc]
+module GHASH = struct
 
-external count8be   : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_8_be"    [@@noalloc]
-external count16be  : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be"   [@@noalloc]
-external count16be4 : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be_4" [@@noalloc]
+  module GHASH_generic = struct
+    external keysize : unit -> int = "mc_ghash_key_size_generic" [@@noalloc]
+    external keyinit : buffer -> off -> bytes -> unit = "mc_ghash_init_key_generic" [@@noalloc]
+    external ghash : bytes -> bytes -> buffer -> off -> size -> unit = "mc_ghash_generic" [@@noalloc]
+    let mode () = 0
+  end
 
-external blit : buffer -> off -> buffer -> off -> size -> unit = "caml_blit_bigstring_to_bigstring" [@@noalloc]
+  module GHASH_pclmul = struct
+    external keysize : unit -> int = "mc_ghash_key_size_pclmul" [@@noalloc]
+    external keyinit : buffer -> off -> bytes -> unit = "mc_ghash_init_key_pclmul" [@@noalloc]
+    external ghash : bytes -> bytes -> buffer -> off -> size -> unit = "mc_ghash_pclmul" [@@noalloc]
+    external mode : unit -> int = "mc_ghash_mode_pclmul" [@@noalloc]
+  end
+
+  let pclmul_supported = true
+  let pclmul_enabled = GHASH_pclmul.mode () = 1
+
+  let impl =
+    if pclmul_supported && pclmul_enabled
+    then (module GHASH_pclmul : GHASH)
+    else (module GHASH_generic : GHASH)
+
+  include (val impl)
+
+end
+
+module type MISC = sig
+  val xor_into : buffer -> off -> buffer -> off -> size -> unit
+  val count16be4 : bytes -> buffer -> off -> blocks:size -> unit
+  external count8be   : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_8_be"    [@@noalloc]
+  external count16be  : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be"   [@@noalloc]
+  external blit : buffer -> off -> buffer -> off -> size -> unit = "caml_blit_bigstring_to_bigstring" [@@noalloc]
+  val mode : unit -> int
+end
+
+module Misc : MISC = struct
+
+  module Misc_generic = struct
+    (* XXX TODO
+     * Unsolved: bounds-checked XORs are slowing things down considerably... *)
+    external xor_into : buffer -> off -> buffer -> off -> size -> unit = "mc_xor_into_generic" [@@noalloc]
+
+    external count8be   : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_8_be"    [@@noalloc]
+    external count16be  : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be"   [@@noalloc]
+    external count16be4 : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be_4_generic" [@@noalloc]
+
+    external blit : buffer -> off -> buffer -> off -> size -> unit = "caml_blit_bigstring_to_bigstring" [@@noalloc]
+    let mode () = 0
+  end
+
+  module Misc_sse = struct
+    external xor_into : buffer -> off -> buffer -> off -> size -> unit = "mc_xor_into_sse" [@@noalloc]
+    external count16be4 : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be_4_sse" [@@noalloc]
+    external mode : unit -> int = "mc_misc_mode_sse" [@@noalloc]
+
+    (* Same as Misc_generic *)
+    external count8be   : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_8_be"    [@@noalloc]
+    external count16be  : bytes -> buffer -> off -> blocks:size -> unit = "mc_count_16_be"   [@@noalloc]
+    external blit : buffer -> off -> buffer -> off -> size -> unit = "caml_blit_bigstring_to_bigstring" [@@noalloc]
+  end
+
+  let sse_supported = true
+  let sse_enabled = Misc_sse.mode () = 1
+
+  let impl =
+    if sse_supported && sse_enabled
+    then (module Misc_sse : MISC)
+    else (module Misc_generic : MISC)
+
+  include (val impl)
+
+end
+
+include Misc

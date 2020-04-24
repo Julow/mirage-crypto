@@ -21,7 +21,8 @@
 #define __MC_GHASH_AGGREGATED_REDUCE
 
 #include "mirage_crypto.h"
-#if defined (__mc_PCLMUL__)
+
+#ifdef __mc_ACCELERATE__
 
 #include <string.h>
 
@@ -186,20 +187,35 @@ static inline void __ghash (__m128i *m, __m128i hash[1], const __m128i *src, siz
   _mm_storeu_si128 (hash, __repr_xform (acc));
 }
 
-CAMLprim value mc_ghash_key_size (__unit ()) { return Val_int (__keys * 16); }
+CAMLprim value mc_ghash_key_size_pclmul (__unit ()) { return Val_int (__keys * 16); }
 
-CAMLprim value mc_ghash_init_key (value key, value off, value m) {
+CAMLprim value mc_ghash_init_key_pclmul (value key, value off, value m) {
   __derive ((__m128i *) _ba_uint8_off (key, off), (__m128i *) Bp_val (m));
   return Val_unit;
 }
 
 CAMLprim value
-mc_ghash (value k, value hash, value src, value off, value len) {
+mc_ghash_pclmul (value k, value hash, value src, value off, value len) {
   __ghash ( (__m128i *) Bp_val (k), (__m128i *) Bp_val (hash),
             (__m128i *) _ba_uint8_off (src, off), Int_val (len) );
   return Val_unit;
 }
 
-CAMLprim value mc_ghash_mode (__unit ()) { return Val_int (1); }
+CAMLprim value mc_ghash_mode_pclmul (__unit ()) { return Val_int (1); }
 
-#endif /* __mc_PCLMUL__ */
+#else /* __mc_ACCELERATE__ */
+
+CAMLprim value mc_ghash_key_size_pclmul (__unit ()) { return Val_int (0); }
+
+CAMLprim value mc_ghash_init_key_pclmul (value _key, value _off, value _m) {
+  return Val_unit;
+}
+
+CAMLprim value
+mc_ghash_pclmul (value _k, value _hash, value _src, value _off, value _len) {
+  return Val_unit;
+}
+
+CAMLprim value mc_ghash_mode_pclmul (__unit ()) { return Val_int (0); }
+
+#endif /* __mc_ACCELERATE__ */

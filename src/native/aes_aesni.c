@@ -9,7 +9,6 @@
  */
 
 #include "mirage_crypto.h"
-#if defined (__mc_AES_NI__)
 
 /* xmm: [3, 2, 1, 0] */
 #define _S_3333 0xff
@@ -17,13 +16,15 @@
 #define _S_1111 0x55
 #define _S_0000 0x00
 
+#if defined (__mc_ACCELERATE__)
+
 /*
  * RKs are currently aligned from the C side on access. Would be better to
  * allocate and pass them in pre-aligned.
  *
  * XXX Get rid of the correction here.
  */
-int _mc_aesni_rk_size (uint8_t rounds) {
+static int _mc_aesni_rk_size (uint8_t rounds) {
   return (rounds + 1) * 16 + 15;
 }
 
@@ -338,12 +339,12 @@ static inline void _mc_aesni_dec_blocks (const uint8_t *src, uint8_t *dst, const
 
 
 CAMLprim value
-mc_aes_rk_size (value rounds) {
+mc_aes_rk_size_aesni (value rounds) {
   return Val_int (_mc_aesni_rk_size (Int_val (rounds)));
 }
 
 CAMLprim value
-mc_aes_derive_e_key (value key, value off1, value rk, value rounds) {
+mc_aes_derive_e_key_aesni (value key, value off1, value rk, value rounds) {
   _mc_aesni_derive_e_key (_ba_uint8_off (key, off1),
                           _ba_uint8 (rk),
                           Int_val (rounds));
@@ -351,7 +352,7 @@ mc_aes_derive_e_key (value key, value off1, value rk, value rounds) {
 }
 
 CAMLprim value
-mc_aes_derive_d_key (value key, value off1, value kr, value rounds, value rk) {
+mc_aes_derive_d_key_aesni (value key, value off1, value kr, value rounds, value rk) {
   _mc_aesni_derive_d_key (_ba_uint8_off (key, off1),
                           _ba_uint8 (kr),
                           Int_val (rounds),
@@ -360,7 +361,7 @@ mc_aes_derive_d_key (value key, value off1, value kr, value rounds, value rk) {
 }
 
 CAMLprim value
-mc_aes_enc (value src, value off1, value dst, value off2, value rk, value rounds, value blocks) {
+mc_aes_enc_aesni (value src, value off1, value dst, value off2, value rk, value rounds, value blocks) {
   _mc_aesni_enc_blocks ( _ba_uint8_off (src, off1),
                          _ba_uint8_off (dst, off2),
                          _ba_uint8 (rk),
@@ -370,7 +371,7 @@ mc_aes_enc (value src, value off1, value dst, value off2, value rk, value rounds
 }
 
 CAMLprim value
-mc_aes_dec (value src, value off1, value dst, value off2, value rk, value rounds, value blocks) {
+mc_aes_dec_aesni (value src, value off1, value dst, value off2, value rk, value rounds, value blocks) {
   _mc_aesni_dec_blocks ( _ba_uint8_off (src, off1),
                          _ba_uint8_off (dst, off2),
                          _ba_uint8 (rk),
@@ -379,9 +380,41 @@ mc_aes_dec (value src, value off1, value dst, value off2, value rk, value rounds
   return Val_unit;
 }
 
-CAMLprim value mc_aes_mode (__unit ()) { return Val_int (1); }
+CAMLprim value mc_aes_mode_aesni (__unit ()) { return Val_int (1); }
 
-__define_bc_7 (mc_aes_enc)
-__define_bc_7 (mc_aes_dec)
+__define_bc_7 (mc_aes_enc_aesni)
+__define_bc_7 (mc_aes_dec_aesni)
 
-#endif /* __mc_AES_NI__ */
+#else /* __mc_ACCELERATE__ */
+
+/* Define dummy functions to allow linking.
+ * They should never be called, [mc_aes_mode_aesni] is [0] in this case. */
+
+CAMLprim value mc_aes_mode_aesni (__unit ()) { return Val_int (0); }
+
+CAMLprim value
+mc_aes_rk_size_aesni (value rounds) {
+  return Val_int (0);
+}
+
+CAMLprim value
+mc_aes_derive_e_key_aesni (value _key, value _off1, value _rk, value _rounds) {
+  return Val_unit;
+}
+
+CAMLprim value
+mc_aes_derive_d_key_aesni (value _key, value _off1, value _kr, value _rounds, value _rk) {
+  return Val_unit;
+}
+
+CAMLprim value
+mc_aes_enc_aesni (value _src, value _off1, value _dst, value _off2, value _rk, value _rounds, value _blocks) {
+  return Val_unit;
+}
+
+CAMLprim value
+mc_aes_dec_aesni (value _src, value _off1, value _dst, value _off2, value _rk, value _rounds, value _blocks) {
+  return Val_unit;
+}
+
+#endif /* __mc_ACCELERATE__ */

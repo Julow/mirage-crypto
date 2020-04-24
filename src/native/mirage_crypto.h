@@ -9,20 +9,7 @@
 
 #if defined (__x86_64__) && defined (ACCELERATE)
 #include <x86intrin.h>
-#endif
-
-#if defined (__x86_64__) && defined (ACCELERATE) && defined (__SSSE3__)
-#define __mc_SSE__
-#endif
-
-#if defined (__x86_64__) && defined (ACCELERATE) && defined (__AES__)
-#define __mc_AES_NI__
-#else
-#define __mc_AES_GENERIC__
-#endif
-
-#if defined (__x86_64__) && defined (ACCELERATE) && defined (__PCLMUL__)
-#define __mc_PCLMUL__
+#define __mc_ACCELERATE__
 #endif
 
 #ifndef __unused
